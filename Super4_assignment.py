@@ -26,6 +26,10 @@ image = Image.open('mlg2.jpeg')
 # Display with a specific width (in pixels)
 st.image(image, caption="Group 4", width=300)
 
+col1, col2 = st.columns(2)
+col1.write("Bernice Baadawo Abbe- 22253447")
+col2.write("Frederica Atsupi Nkegbe -22253148")
+
 
 # Initialize session state
 if 'data' not in st.session_state:
