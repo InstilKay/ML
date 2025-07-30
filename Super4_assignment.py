@@ -23,8 +23,8 @@ st.set_page_config(
 
 image = Image.open('mlg2.jpeg')
 
-# Display the image in the app
-st.image(image, caption='My Image', use_column_width=True)
+# Display with a specific width (in pixels)
+st.image(image, caption="Resized Image", width=300)
 
 
 # Initialize session state
