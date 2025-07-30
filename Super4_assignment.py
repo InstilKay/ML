@@ -16,15 +16,16 @@ warnings.filterwarnings('ignore')
 st.set_page_config(
     page_title="Customer Churn Prediction",
     page_icon="📊",
-    layout="wide"
-)
-
-# Load an image from file
+    layout="wide",
+    # Load an image from file
 
 image = Image.open('mlg2.jpeg')
 
 # Display with a specific width (in pixels)
 st.image(image, caption="Group 4", width=500)
+)
+
+
 
 
 st.write("Bernice Baadawo Abbe- 22253447")
