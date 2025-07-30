@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from PIL import Image
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -17,6 +18,8 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+
+image = Image.open('your_image.jpg')
 
 # Initialize session state
 if 'data' not in st.session_state:
