@@ -19,7 +19,13 @@ st.set_page_config(
     layout="wide"
 )
 
-image = Image.open('your_image.jpg')
+# Load an image from file
+
+image = Image.open('mlg2.jpeg')
+
+# Display the image in the app
+st.image(image, caption='My Image', use_column_width=True)
+
 
 # Initialize session state
 if 'data' not in st.session_state:
