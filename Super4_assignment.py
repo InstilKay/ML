@@ -20,9 +20,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Load and display image
-image = Image.open('mlg2.jpeg')
-st.image(image, caption="Group 4", width=500)
+
+# Show image only on main page
+if __name__ == "__main__":  # or use a custom flag
+    image = Image.open("mlg2.jpeg")
+    st.image(image, caption="Group 4", width=500)
+
 
 
 st.write("Bernice Baadawo Abbe- 22253447")
