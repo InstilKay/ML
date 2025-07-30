@@ -29,6 +29,9 @@ st.image(image, caption="Group 4", width=500)
 
 st.write("Bernice Baadawo Abbe- 22253447")
 st.write("Frederica Atsupi Nkegbe -22253148")
+st.write("Instil Paakwesi Appau -22252453")
+st.write("Erwin K. Opare-Essel -22254064")
+st.write("Anita Dickson -22253364")
 
 
 # Initialize session state
