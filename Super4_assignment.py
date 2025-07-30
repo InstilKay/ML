@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide",
     # Load an image from file
 
-image = Image.open('mlg2.jpeg')
+image = Image.open('mlg2.jpeg'),
 
 # Display with a specific width (in pixels)
 st.image(image, caption="Group 4", width=500)
