@@ -24,7 +24,7 @@ st.set_page_config(
 image = Image.open('mlg2.jpeg')
 
 # Display with a specific width (in pixels)
-st.image(image, caption="Resized Image", width=300)
+st.image(image, caption="Group 4", width=300)
 
 
 # Initialize session state
