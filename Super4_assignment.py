@@ -3,600 +3,851 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+import seaborn as sns
+from PIL import Image
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-from PIL import Image
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, 
+                           f1_score, classification_report, confusion_matrix, 
+                           roc_curve, auc)
 import warnings
 warnings.filterwarnings('ignore')
-
-
-#Page configuration
+# Page configuration
 st.set_page_config(
     page_title="Customer Churn Prediction",
-    page_icon="📊",
+    page_icon="📱",
     layout="wide"
 )
 
-
-# Show image only on main page
-if __name__ == "__main__":  # or use a custom flag
-    image = Image.open("mlg2.jpeg")
-    st.image(image, caption="Group 4", width=500)
-
-
-
-st.write("Bernice Baadawo Abbe- 22253447")
-st.write("Frederica Atsupi Nkegbe -22253148")
-st.write("Instil Paakwesi Appau -22252453")
-st.write("Erwin K. Opare-Essel -22254064")
-st.write("Anita Dickson -22253364")
-
-
-# Initialize session state
-if 'data' not in st.session_state:
-    st.session_state.data = None
+# Global variables for storing data and models
+if 'dataset' not in st.session_state:
+    st.session_state.dataset = None
 if 'processed_data' not in st.session_state:
     st.session_state.processed_data = None
 if 'models' not in st.session_state:
     st.session_state.models = {}
-if 'model_results' not in st.session_state:
-    st.session_state.model_results = {}
+if 'model_metrics' not in st.session_state:
+    st.session_state.model_metrics = {}
 
-# Sidebar navigation
-st.sidebar.title("Navigation")
-page = st.sidebar.selectbox("Choose a page:", [
-    "Data Import and Overview",
-    "Data Preprocessing", 
-    "Model Training",
-    "Model Evaluation",
-    "Prediction Page",
-    "Interpretation and Conclusions"
-])
-
-# Helper functions
-def load_sample_data():
-    """Load sample telco customer churn data"""
+def load_default_dataset():
+    """Load the default Telco Customer Churn dataset"""
     try:
-        url = "https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv"
-        data = pd.read_csv(url)
-        return data
-    except Exception as e:
-        st.error(f"Error loading sample data: {str(e)}")
+        # You can replace this path with your dataset path
+        dataset = pd.read_csv("WA_Fn-UseC_-Telco-Customer-Churn.csv")
+        return dataset
+    except FileNotFoundError:
+        st.error("Default dataset not found. Please upload a dataset.")
         return None
 
-def preprocess_data(dataset):
-    """Preprocess the data for modeling"""
-    if dataset is None:
-        return None
-        
-    dataset_processed = dataset.copy()
+def preprocess_data(df):
+    """Comprehensive data preprocessing function"""
+    df_processed = df.copy()
     
     # Handle TotalCharges column (convert to numeric)
-    if 'TotalCharges' in dataset_processed.columns:
-        dataset_processed['TotalCharges'] = pd.to_numeric(dataset_processed['TotalCharges'], errors='coerce')
-        dataset_processed['TotalCharges'].fillna(dataset_processed['TotalCharges'].median(), inplace=True)
+    df_processed['TotalCharges'] = df_processed['TotalCharges'].replace(' ', np.nan)
+    df_processed['TotalCharges'] = pd.to_numeric(df_processed['TotalCharges'])
     
-    # Encode categorical variables
-    le = LabelEncoder()
-    categorical_columns = ['gender', 'Partner', 'Dependents', 'PhoneService', 'MultipleLines',
-                          'InternetService', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
-                          'TechSupport', 'StreamingTV', 'StreamingMovies', 'Contract',
+    # Fill missing values in TotalCharges with median
+    df_processed['TotalCharges'].fillna(df_processed['TotalCharges'].median(), inplace=True)
+    
+    # Create binary encoding for categorical variables
+    label_encoders = {}
+    categorical_columns = ['gender', 'Partner', 'Dependents', 'PhoneService', 
+                          'MultipleLines', 'InternetService', 'OnlineSecurity', 
+                          'OnlineBackup', 'DeviceProtection', 'TechSupport', 
+                          'StreamingTV', 'StreamingMovies', 'Contract', 
                           'PaperlessBilling', 'PaymentMethod', 'Churn']
     
     for col in categorical_columns:
-        if col in dataset_processed.columns:
-            dataset_processed[col] = le.fit_transform(dataset_processed[col].astype(str))
+        if col in df_processed.columns:
+            le = LabelEncoder()
+            df_processed[col + '_encoded'] = le.fit_transform(df_processed[col])
+            label_encoders[col] = le
     
-    return dataset_processed
+    # Store label encoders in session state
+    st.session_state.label_encoders = label_encoders
+    
+    # Standardize numerical features
+    numerical_features = ['tenure', 'MonthlyCharges', 'TotalCharges']
+    scaler = StandardScaler()
+    df_processed[numerical_features] = scaler.fit_transform(df_processed[numerical_features])
+    
+    # Store scaler in session state
+    st.session_state.scaler = scaler
+    
+    return df_processed
 
-# PAGE 1: Data Import and Overview
-if page == "Data Import and Overview":
-    st.title("Customer Churn Prediction - Data Overview")
+def get_model_features(df):
+    """Get features for modeling (encoded columns + numerical)"""
+    feature_columns = [col for col in df.columns if col.endswith('_encoded') and col != 'Churn_encoded']
+    feature_columns.extend(['tenure', 'MonthlyCharges', 'TotalCharges'])
+    return feature_columns
+
+def train_models(X_train, X_test, y_train, y_test):
+    """Train and evaluate both models"""
+    models = {}
+    metrics = {}
     
-    # File upload section
-    st.subheader("Upload Your Dataset")
-    uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'], 
-                                   help="Upload your customer churn data in CSV format")
+    # Logistic Regression
+    lr_model = LogisticRegression(random_state=42, max_iter=1000)
+    lr_model.fit(X_train, y_train)
+    lr_pred = lr_model.predict(X_test)
+    lr_pred_proba = lr_model.predict_proba(X_test)[:, 1]
     
-    if uploaded_file is not None:
-        try:
-            st.session_state.data = pd.read_csv(uploaded_file)
-            st.success("Data uploaded successfully!")
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
+    models['Logistic Regression'] = lr_model
+    metrics['Logistic Regression'] = {
+        'accuracy': accuracy_score(y_test, lr_pred),
+        'precision': precision_score(y_test, lr_pred),
+        'recall': recall_score(y_test, lr_pred),
+        'f1': f1_score(y_test, lr_pred),
+        'predictions': lr_pred,
+        'probabilities': lr_pred_proba
+    }
     
-    # Sample data section
-    if st.session_state.data is None:
-        st.subheader("Try with Sample Data")
-        if st.button("Load Sample Telco Dataset"):
-            with st.spinner("Loading sample data..."):
-                st.session_state.data = load_sample_data()
-                if st.session_state.data is not None:
-                    st.success("Sample data loaded successfully!")
+    # Decision Tree
+    dt_model = DecisionTreeClassifier(random_state=42, max_depth=10)
+    dt_model.fit(X_train, y_train)
+    dt_pred = dt_model.predict(X_test)
+    dt_pred_proba = dt_model.predict_proba(X_test)[:, 1]
     
-    if st.session_state.data is not None:
-        dataset = st.session_state.data
+    models['Decision Tree'] = dt_model
+    metrics['Decision Tree'] = {
+        'accuracy': accuracy_score(y_test, dt_pred),
+        'precision': precision_score(y_test, dt_pred),
+        'recall': recall_score(y_test, dt_pred),
+        'f1': f1_score(y_test, dt_pred),
+        'predictions': dt_pred,
+        'probabilities': dt_pred_proba,
+        'feature_importance': dt_model.feature_importances_
+    }
+    
+    return models, metrics
+
+# Page 1: Data Import and Overview
+def page_data_overview():
+    st.title("📊 Data Import and Overview")
+    st.markdown("---")
+    
+    # Data loading section
+    st.subheader("🔄 Data Loading")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Load Default Dataset"):
+            dataset = load_default_dataset()
+            if dataset is not None:
+                st.session_state.dataset = dataset
+                st.success("Default dataset loaded successfully!")
+    
+    with col2:
+        uploaded_file = st.file_uploader("Upload your own dataset", type=['csv'])
+        if uploaded_file is not None:
+            dataset = pd.read_csv(uploaded_file)
+            st.session_state.dataset = dataset
+            st.success("Custom dataset uploaded successfully!")
+    
+    if st.session_state.dataset is not None:
+        df = st.session_state.dataset
         
-        # Basic dataset info
-        st.subheader("Dataset Overview")
+        # Dataset overview
+        st.subheader("📈 Dataset Overview")
+        
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            st.metric("Total Customers", len(dataset))
+            st.metric("Total Customers", len(df))
         with col2:
-            st.metric("Features", len(dataset.columns)-1)
+            churn_count = df['Churn'].value_counts().get('Yes', 0)
+            st.metric("Churned Customers", churn_count)
         with col3:
-            if 'Churn' in dataset.columns:
-                if dataset['Churn'].dtype == 'object':
-                    churned = dataset['Churn'].value_counts().get('Yes', 0)
-                else:
-                    churned = dataset['Churn'].sum()
-                st.metric("Churned Customers", churned)
-            else:
-                st.warning("No 'Churn' column found")
+            churn_rate = (churn_count / len(df)) * 100
+            st.metric("Churn Rate", f"{churn_rate:.1f}%")
         with col4:
-            if 'Churn' in dataset.columns:
-                churn_rate = (churned / len(dataset)) * 100
-                st.metric("Churn Rate", f"{churn_rate:.1f}%")
+            st.metric("Features", len(df.columns))
         
-        # Display first few rows
-        st.subheader("Sample Data")
-        st.dataframe(dataset.head())
+        # Display raw data
+        if st.checkbox("📋 Show Raw Dataset"):
+            st.dataframe(df.head(100))
         
         # Summary statistics
-        st.subheader("Summary Statistics")
-        st.dataframe(dataset.describe(include='all'))
+        if st.checkbox("📊 Show Summary Statistics"):
+            st.subheader("Numerical Features Summary")
+            numerical_cols = df.select_dtypes(include=[np.number]).columns
+            st.dataframe(df[numerical_cols].describe())
+            
+            st.subheader("Categorical Features Summary")
+            categorical_cols = df.select_dtypes(include=['object']).columns
+            for col in categorical_cols:
+                st.write(f"**{col}:**")
+                st.write(df[col].value_counts())
+                st.write("---")
         
-        # Visualizations
-        st.subheader("Exploratory Data Analysis")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Churn distribution
-            if 'Churn' in dataset.columns:
-                fig, ax = plt.subplots(figsize=(8, 6))
-                if dataset['Churn'].dtype == 'object':
-                    churn_counts = dataset['Churn'].value_counts()
-                    labels = churn_counts.index
-                else:
-                    churn_counts = dataset['Churn'].value_counts()
-                    labels = ['No' if x == 0 else 'Yes' for x in churn_counts.index]
-                ax.bar(labels, churn_counts.values, color=['skyblue', 'salmon'])
-                ax.set_title('Churn Distribution')
-                ax.set_xlabel('Churn')
-                ax.set_ylabel('Count')
-                st.pyplot(fig)
-        
-        with col2:
-            # Tenure histogram
-            if 'tenure' in dataset.columns:
-                fig, ax = plt.subplots(figsize=(8, 6))
-                ax.hist(dataset['tenure'], bins=30, color='lightgreen', alpha=0.7)
-                ax.set_title('Customer Tenure Distribution')
-                ax.set_xlabel('Tenure (months)')
-                ax.set_ylabel('Frequency')
-                st.pyplot(fig)
-        
-        # Correlation matrix for numerical features
-        st.subheader("Correlation Matrix")
-        numerical_cols = dataset.select_dtypes(include=[np.number]).columns
-        if len(numerical_cols) > 1:
-            fig, ax = plt.subplots(figsize=(10, 8))
-            correlation_matrix = dataset[numerical_cols].corr()
+        # Basic visualizations
+        if st.checkbox("📈 Show Exploratory Visualizations"):
+            st.subheader("Churn Distribution")
+            fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+            
+            # Churn count plot
+            df['Churn'].value_counts().plot(kind='bar', ax=ax[0], color=['skyblue', 'salmon'])
+            ax[0].set_title('Churn Distribution')
+            ax[0].set_xlabel('Churn')
+            ax[0].set_ylabel('Count')
+            
+            # Churn pie chart
+            df['Churn'].value_counts().plot(kind='pie', ax=ax[1], autopct='%1.1f%%', colors=['skyblue', 'salmon'])
+            ax[1].set_title('Churn Percentage')
+            ax[1].set_ylabel('')
+            
+            st.pyplot(fig)
+            
+            # Numerical features histograms
+            st.subheader("Distribution of Numerical Features")
+            numerical_cols = ['tenure', 'MonthlyCharges', 'TotalCharges']
+            
+            for col in numerical_cols:
+                if col in df.columns:
+                    fig, ax = plt.subplots(figsize=(10, 4))
+                    df[col].hist(bins=30, ax=ax, alpha=0.7, color='teal')
+                    ax.set_title(f'Distribution of {col}')
+                    ax.set_xlabel(col)
+                    ax.set_ylabel('Frequency')
+                    st.pyplot(fig)
+            
+            # Correlation matrix
+            st.subheader("Correlation Matrix (Numerical Features)")
+            # Convert TotalCharges to numeric for correlation
+            df_corr = df.copy()
+            df_corr['TotalCharges'] = pd.to_numeric(df_corr['TotalCharges'], errors='coerce')
+            numerical_cols_clean = ['SeniorCitizen', 'tenure', 'MonthlyCharges', 'TotalCharges']
+            
+            fig, ax = plt.subplots(figsize=(8, 6))
+            correlation_matrix = df_corr[numerical_cols_clean].corr()
             sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0, ax=ax)
-            ax.set_title('Correlation Matrix of Numerical Features')
+            ax.set_title('Correlation Matrix')
             st.pyplot(fig)
 
-# PAGE 2: Data Preprocessing
-elif page == "Data Preprocessing":
+# Page 2: Data Preprocessing
+def page_preprocessing():
     st.title("🔧 Data Preprocessing")
+    st.markdown("---")
     
-    if st.session_state.data is None:
-        st.warning("Please upload or load dataset in the 'Data Import and Overview' page.")
-    else:
-        dataset = st.session_state.data
-        
-        st.subheader("Raw Data")
-        st.write(f"Shape: {dataset.shape}")
-        st.dataframe(dataset.head())
-        
-        # Check for missing values
-        st.subheader("Missing Values Analysis")
-        missing_values = dataset.isnull().sum()
+    if st.session_state.dataset is None:
+        st.warning("Please load a dataset first from the Data Overview page.")
+        return
+    
+    df = st.session_state.dataset
+    
+    st.subheader("🔍 Data Quality Check")
+    
+    # Missing values check
+    if st.checkbox("📊 Check Missing Values"):
+        missing_values = df.isnull().sum()
         if missing_values.sum() > 0:
             st.write("Missing values found:")
             st.dataframe(missing_values[missing_values > 0])
         else:
-            st.success("No missing values!")
+            st.success("No missing values found!")
+    
+    # Data types check
+    if st.checkbox("🔤 Check Data Types"):
+        st.dataframe(df.dtypes.to_frame('Data Type'))
+    
+    # Special handling for TotalCharges
+    if st.checkbox("⚠️ Check TotalCharges Anomalies"):
+        total_charges_issues = df[df['TotalCharges'] == ' ']
+        st.write(f"Found {len(total_charges_issues)} rows with space in TotalCharges")
+        if len(total_charges_issues) > 0:
+            st.dataframe(total_charges_issues)
+    
+    # Preprocessing
+    st.subheader("⚙️ Apply Preprocessing")
+    
+    if st.button("🚀 Process Data"):
+        with st.spinner("Processing data..."):
+            processed_data = preprocess_data(df)
+            st.session_state.processed_data = processed_data
+            st.success("Data preprocessing completed!")
+    
+    # Show processed data
+    if st.session_state.processed_data is not None:
+        processed_df = st.session_state.processed_data
         
-        # Data type information
-        st.subheader("Data Types")
-        st.write(dataset.dtypes)
-        
-        # Preprocessing button
-        if st.button("Preprocess Data"):
-            with st.spinner("Processing data..."):
-                st.session_state.processed_data = preprocess_data(dataset)
-                if st.session_state.processed_data is not None:
-                    st.success("Data preprocessing completed!")
-                else:
-                    st.error("Preprocessing failed. Check your data.")
-        
-        # Show processed data
-        if st.session_state.processed_data is not None:
-            processed_df = st.session_state.processed_data
-            
-            st.subheader("Processed Data")
-            st.write(f"Shape: {processed_df.shape}")
+        if st.checkbox("📋 Show Processed Data"):
             st.dataframe(processed_df.head())
+        
+        if st.checkbox("🔢 Show Encoded Features"):
+            encoded_cols = [col for col in processed_df.columns if col.endswith('_encoded')]
+            st.dataframe(processed_df[encoded_cols].head())
+        
+        # Preprocessing summary
+        if st.checkbox("📝 Preprocessing Summary"):
+            st.write("**Preprocessing Steps Applied:**")
+            st.write("✅ Converted TotalCharges to numeric")
+            st.write("✅ Filled missing values with median")
+            st.write("✅ Applied Label Encoding to categorical variables")
+            st.write("✅ Standardized numerical features")
             
-            st.subheader("Preprocessing Steps Applied:")
-            st.write("- Converted TotalCharges to numeric (if present)")
-            st.write("- Filled missing values with median")
-            st.write("- Applied Label Encoding to categorical variables")
-            st.write("✅ Data is ready for modeling")
+            st.write(f"**Original shape:** {df.shape}")
+            st.write(f"**Processed shape:** {processed_df.shape}")
 
-# PAGE 3: Model Training
-elif page == "Model Training":
+# Page 3: Model Training
+def page_model_training():
     st.title("🤖 Model Training")
+    st.markdown("---")
     
     if st.session_state.processed_data is None:
-        st.warning("Please preprocess the data in the 'Data Preprocessing' page.")
-    elif 'Churn' not in st.session_state.processed_data.columns:
-        st.error("Processed data doesn't contain 'Churn' column. Please check your data.")
-    else:
-        dataset = st.session_state.processed_data
-        # Prepare features and target
-        X = dataset.drop(['Churn'], axis=1, errors='ignore')
-        # Drop non-feature columns
-        X = X.select_dtypes(include=[np.number])
-        y = dataset['Churn']
+        st.warning("Please preprocess the data first.")
+        return
+    
+    df = st.session_state.processed_data
+    
+    st.subheader("🎯 Model Configuration")
+    
+    # Feature selection
+    feature_columns = get_model_features(df)
+    target_column = 'Churn_encoded'
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        test_size = st.slider("Test Size", 0.1, 0.5, 0.2, 0.05)
+    with col2:
+        random_state = st.number_input("Random State", value=42, min_value=0)
+    
+    # Show model parameters
+    if st.checkbox("⚙️ Show Model Parameters"):
+        st.write("**Logistic Regression Parameters:**")
+        st.write("- Solver: liblinear")
+        st.write("- Max iterations: 1000")
+        st.write("- Random state:", random_state)
         
-        # Check if we have features to work with
-        if X.shape[1] == 0:
-            st.error("No numerical features found for modeling. Please check your data preprocessing.")
-        else:
-            # Train-test split
-            test_size = st.slider("Test Size", 0.1, 0.4, 0.2, 0.05)
-            random_state = st.number_input("Random State", value=42, min_value=0)
+        st.write("**Decision Tree Parameters:**")
+        st.write("- Max depth: 10")
+        st.write("- Random state:", random_state)
+        st.write("- Criterion: gini")
+    
+    # Train models
+    if st.button("🚀 Train Models"):
+        with st.spinner("Training models..."):
+            # Prepare data
+            X = df[feature_columns]
+            y = df[target_column]
             
+            # Train-test split
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=random_state, stratify=y
             )
             
-            # Scale features
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
+            # Store split data
+            st.session_state.X_train = X_train
+            st.session_state.X_test = X_test
+            st.session_state.y_train = y_train
+            st.session_state.y_test = y_test
+            st.session_state.feature_columns = feature_columns
             
-            st.write(f"Training set size: {X_train.shape[0]}")
-            st.write(f"Test set size: {X_test.shape[0]}")
-            st.write(f"Number of features: {X_train.shape[1]}")
+            # Train models
+            models, metrics = train_models(X_train, X_test, y_train, y_test)
             
-            # Model training
-            if st.button("Train Models"):
-                with st.spinner("Training models..."):
-                    try:
-                        # Logistic Regression
-                        lr_model = LogisticRegression(random_state=random_state, max_iter=1000)
-                        lr_model.fit(X_train_scaled, y_train)
-                        
-                        # Decision Tree
-                        dt_model = DecisionTreeClassifier(random_state=random_state)
-                        dt_model.fit(X_train, y_train)
-                        
-                        # Store models and data
-                        st.session_state.models = {
-                            'logistic_regression': lr_model,
-                            'decision_tree': dt_model,
-                            'scaler': scaler,
-                            'X_train': X_train,
-                            'X_test': X_test,
-                            'y_train': y_train,
-                            'y_test': y_test,
-                            'X_train_scaled': X_train_scaled,
-                            'X_test_scaled': X_test_scaled,
-                            'feature_names': X.columns.tolist()
-                        }
-                        
-                        st.success("Models trained successfully!")
-                    except Exception as e:
-                        st.error(f"Error training models: {str(e)}")
+            st.session_state.models = models
+            st.session_state.model_metrics = metrics
             
-            # Display model information
-            if st.session_state.models:
-                st.subheader("Trained Models")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("**Logistic Regression**")
-                    lr_model = st.session_state.models['logistic_regression']
-                    st.write(f"Intercept: {lr_model.intercept_[0]:.4f}")
-                    st.write(f"Number of coefficients: {len(lr_model.coef_[0])}")
-                    st.write(f"Features: {', '.join(st.session_state.models['feature_names'][:3])}...")
-                
-                with col2:
-                    st.write("**Decision Tree Classifier**")
-                    dt_model = st.session_state.models['decision_tree']
-                    st.write(f"Max Depth: {dt_model.get_depth()}")
-                    st.write(f"Number of leaves: {dt_model.get_n_leaves()}")
-                    st.write(f"Features: {', '.join(st.session_state.models['feature_names'][:3])}...")
-
-# PAGE 4: Model Evaluation
-elif page == "Model Evaluation":
-    st.title("📊 Model Evaluation")
+            st.success("Models trained successfully!")
     
-    if not st.session_state.models:
-        st.warning("Please train models in the 'Model Training' page.")
-    else:
-        models = st.session_state.models
+    # Display training results
+    if st.session_state.models:
+        st.subheader("📊 Training Results")
         
-        # Make predictions
-        try:
-            lr_pred = models['logistic_regression'].predict(models['X_test_scaled'])
-            dt_pred = models['decision_tree'].predict(models['X_test'])
+        # Feature importance for Decision Tree
+        if st.checkbox("🎯 Show Feature Importance (Decision Tree)"):
+            dt_model = st.session_state.models['Decision Tree']
+            feature_importance = pd.DataFrame({
+                'feature': st.session_state.feature_columns,
+                'importance': dt_model.feature_importances_
+            }).sort_values('importance', ascending=False)
             
-            # Calculate metrics
-            def calculate_metrics(y_true, y_pred, model_name):
-                return {
-                    'Model': model_name,
-                    'Accuracy': accuracy_score(y_true, y_pred),
-                    'Precision': precision_score(y_true, y_pred, zero_division=0),
-                    'Recall': recall_score(y_true, y_pred, zero_division=0),
-                    'F1-Score': f1_score(y_true, y_pred, zero_division=0)
-                }
-            
-            lr_metrics = calculate_metrics(models['y_test'], lr_pred, 'Logistic Regression')
-            dt_metrics = calculate_metrics(models['y_test'], dt_pred, 'Decision Tree')
-            
-            # Comparing Model Performance
-            st.subheader("Model Performance Comparison")
-            metrics_df = pd.DataFrame([lr_metrics, dt_metrics])
-            st.dataframe(metrics_df.set_index('Model').style.format("{:.3f}"))
-            
-            # Visualize metrics
-            fig, ax = plt.subplots(figsize=(12, 6))
-            metrics_to_plot = ['Accuracy', 'Precision', 'Recall', 'F1-Score']
-            x = np.arange(len(metrics_to_plot))
-            width = 0.35
-            
-            lr_values = [lr_metrics[metric] for metric in metrics_to_plot]
-            dt_values = [dt_metrics[metric] for metric in metrics_to_plot]
-            
-            ax.bar(x - width/2, lr_values, width, label='Logistic Regression', alpha=0.8)
-            ax.bar(x + width/2, dt_values, width, label='Decision Tree', alpha=0.8)
-            
-            ax.set_xlabel('Metrics')
-            ax.set_ylabel('Score')
-            ax.set_title('Model Performance Comparison')
-            ax.set_xticks(x)
-            ax.set_xticklabels(metrics_to_plot)
-            ax.legend()
-            ax.set_ylim(0, 1)
-            
-            for i, v in enumerate(lr_values):
-                ax.text(i - width/2, v + 0.01, f'{v:.3f}', ha='center', va='bottom')
-            for i, v in enumerate(dt_values):
-                ax.text(i + width/2, v + 0.01, f'{v:.3f}', ha='center', va='bottom')
-            
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.barplot(data=feature_importance.head(10), y='feature', x='importance', ax=ax)
+            ax.set_title('Top 10 Feature Importances (Decision Tree)')
             st.pyplot(fig)
             
-            # Confusion matrices
-            st.subheader("Confusion Matrices")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write("**Logistic Regression**")
-                lr_cm = confusion_matrix(models['y_test'], lr_pred)
-                fig, ax = plt.subplots(figsize=(6, 5))
-                sns.heatmap(lr_cm, annot=True, fmt='d', cmap='Blues', ax=ax,
-                            xticklabels=['No Churn', 'Churn'],
-                            yticklabels=['No Churn', 'Churn'])
-                ax.set_title('Logistic Regression Confusion Matrix')
-                ax.set_xlabel('Predicted')
-                ax.set_ylabel('Actual')
-                st.pyplot(fig)
-            
-            with col2:
-                st.write("**Decision Tree**")
-                dt_cm = confusion_matrix(models['y_test'], dt_pred)
-                fig, ax = plt.subplots(figsize=(6, 5))
-                sns.heatmap(dt_cm, annot=True, fmt='d', cmap='Greens', ax=ax,
-                            xticklabels=['No Churn', 'Churn'],
-                            yticklabels=['No Churn', 'Churn'])
-                ax.set_title('Decision Tree Confusion Matrix')
-                ax.set_xlabel('Predicted')
-                ax.set_ylabel('Actual')
-                st.pyplot(fig)
-            
-            # Store results
-            st.session_state.model_results = {
-                'lr_metrics': lr_metrics,
-                'dt_metrics': dt_metrics,
-                'lr_pred': lr_pred,
-                'dt_pred': dt_pred,
-                'feature_names': models['feature_names']
-            }
-            
-        except Exception as e:
-            st.error(f"Error evaluating models: {str(e)}")
+            st.dataframe(feature_importance)
 
-# PAGE 5: Prediction Page
-elif page == "Prediction Page":
-    st.title("🔮 Churn Prediction")
+# Page 4: Model Evaluation
+def page_model_evaluation():
+    st.title("📏 Model Evaluation")
+    st.markdown("---")
     
     if not st.session_state.models:
-        st.warning("Please train models in the 'Model Training' page.")
-    else:
-        models = st.session_state.models
-        feature_names = models['feature_names']
-        
-        st.subheader("Enter Customer Data")
-        
-        # Create input form based on available features
-        input_data = {}
-        cols_per_row = 2
-        features_per_col = len(feature_names) // cols_per_row + 1
-        
-        columns = st.columns(cols_per_row)
-        
-        for i, feature in enumerate(feature_names):
-            with columns[i % cols_per_row]:
-                if feature == 'tenure':
-                    input_data[feature] = st.slider(feature, 0, 100, 12)
-                elif feature == 'MonthlyCharges':
-                    input_data[feature] = st.number_input(feature, 0.0, 200.0, 50.0)
-                elif feature == 'TotalCharges':
-                    input_data[feature] = st.number_input(feature, 0.0, 10000.0, 1000.0)
-                else:
-                    # For categorical features that were encoded
-                    unique_values = st.session_state.processed_data[feature].unique()
-                    if len(unique_values) <= 5:  # Likely categorical
-                        input_data[feature] = st.selectbox(feature, sorted(unique_values))
-                    else:
-                        input_data[feature] = st.number_input(feature, value=0)
-        
-        if st.button("Predict Churn"):
-            try:
-                # Convert to DataFrame
-                input_df = pd.DataFrame([input_data])
-                
-                # Ensure columns are in correct order
-                input_df = input_df[feature_names]
-                
-                # Scale input for logistic regression
-                input_scaled = st.session_state.models['scaler'].transform(input_df)
-                
-                # Make predictions
-                lr_pred = st.session_state.models['logistic_regression'].predict(input_scaled)[0]
-                lr_prob = st.session_state.models['logistic_regression'].predict_proba(input_scaled)[0]
-                
-                dt_pred = st.session_state.models['decision_tree'].predict(input_df)[0]
-                dt_prob = st.session_state.models['decision_tree'].predict_proba(input_df)[0]
-                
-                # Display results
-                st.subheader("Prediction Results")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write("**Logistic Regression**")
-                    if lr_pred == 1:
-                        st.error("⚠️ Customer is likely to CHURN")
-                        st.write(f"Probability: {lr_prob[1]:.1%}")
-                    else:
-                        st.success("✅ Customer will STAY")
-                        st.write(f"Probability: {lr_prob[0]:.1%}")
-                    st.progress(lr_prob[1])
-                
-                with col2:
-                    st.write("**Decision Tree**")
-                    if dt_pred == 1:
-                        st.error("⚠️ Customer is likely to CHURN")
-                        st.write(f"Probability: {dt_prob[1]:.1%}")
-                    else:
-                        st.success("✅ Customer will STAY")
-                        st.write(f"Probability: {dt_prob[0]:.1%}")
-                    st.progress(dt_prob[1])
-            
-            except Exception as e:
-                st.error(f"Error making prediction: {str(e)}")
-
-# PAGE 6: Interpretation and Conclusions
-elif page == "Interpretation and Conclusions":
-    st.title("📝 Interpretation and Conclusions")
+        st.warning("Please train the models first.")
+        return
     
-    if not st.session_state.model_results:
-        st.warning("Please train and evaluate models first.")
-    else:
-        results = st.session_state.model_results
+    metrics = st.session_state.model_metrics
+    
+    # Metrics comparison table
+    st.subheader("📊 Model Performance Comparison")
+    
+    comparison_data = []
+    for model_name, model_metrics in metrics.items():
+        comparison_data.append({
+            'Model': model_name,
+            'Accuracy': f"{model_metrics['accuracy']:.4f}",
+            'Precision': f"{model_metrics['precision']:.4f}",
+            'Recall': f"{model_metrics['recall']:.4f}",
+            'F1-Score': f"{model_metrics['f1']:.4f}"
+        })
+    
+    comparison_df = pd.DataFrame(comparison_data)
+    st.dataframe(comparison_df)
+    
+    # Individual model metrics
+    selected_model = st.selectbox("Select Model for Detailed Analysis", list(metrics.keys()))
+    
+    if st.checkbox("📋 Show Classification Report"):
+        y_test = st.session_state.y_test
+        predictions = metrics[selected_model]['predictions']
         
-        # Model performance summary
-        st.subheader("Model Performance Summary")
+        st.text("Classification Report:")
+        report = classification_report(y_test, predictions)
+        st.text(report)
+    
+    # Confusion Matrix
+    if st.checkbox("🔀 Show Confusion Matrix"):
+        y_test = st.session_state.y_test
+        predictions = metrics[selected_model]['predictions']
         
-        metrics_df = pd.DataFrame([results['lr_metrics'], results['dt_metrics']])
-        st.dataframe(metrics_df.set_index('Model').style.format("{:.3f}"))
+        cm = confusion_matrix(y_test, predictions)
         
-        # Feature importance (if Decision Tree was trained)
-        if 'decision_tree' in st.session_state.models:
-            st.subheader("Feature Importance Analysis")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                   xticklabels=['No Churn', 'Churn'],
+                   yticklabels=['No Churn', 'Churn'], ax=ax)
+        ax.set_title(f'Confusion Matrix - {selected_model}')
+        ax.set_xlabel('Predicted')
+        ax.set_ylabel('Actual')
+        st.pyplot(fig)
+    
+    # ROC Curve
+    if st.checkbox("📈 Show ROC Curve"):
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        for model_name, model_metrics in metrics.items():
+            y_test = st.session_state.y_test
+            probabilities = model_metrics['probabilities']
             
-            dt_model = st.session_state.models['decision_tree']
-            feature_importance = pd.DataFrame({
-                'Feature': results['feature_names'],
+            fpr, tpr, _ = roc_curve(y_test, probabilities)
+            roc_auc = auc(fpr, tpr)
+            
+            ax.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.3f})')
+        
+        ax.plot([0, 1], [0, 1], 'k--', label='Random')
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title('ROC Curves Comparison')
+        ax.legend()
+        ax.grid(True)
+        st.pyplot(fig)
+    
+    # Model comparison visualization
+    if st.checkbox("📊 Show Metrics Comparison Chart"):
+        metrics_data = []
+        for model_name, model_metrics in metrics.items():
+            metrics_data.append({
+                'Model': model_name,
+                'Accuracy': model_metrics['accuracy'],
+                'Precision': model_metrics['precision'],
+                'Recall': model_metrics['recall'],
+                'F1-Score': model_metrics['f1']
+            })
+        
+        metrics_df = pd.DataFrame(metrics_data)
+        metrics_melted = metrics_df.melt(id_vars=['Model'], var_name='Metric', value_name='Score')
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(data=metrics_melted, x='Metric', y='Score', hue='Model', ax=ax)
+        ax.set_title('Model Performance Comparison')
+        ax.set_ylim(0, 1)
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
+# Page 5: Prediction
+def page_prediction():
+    st.title("🔮 Customer Churn Prediction")
+    st.markdown("---")
+    
+    if not st.session_state.models:
+        st.warning("Please train the models first.")
+        return
+    
+    st.subheader("📝 Enter Customer Information")
+    
+    # Model selection
+    selected_model_name = st.selectbox("Select Model for Prediction", list(st.session_state.models.keys()))
+    selected_model = st.session_state.models[selected_model_name]
+    
+    # Create input form
+    with st.form("prediction_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            gender = st.selectbox("Gender", ["Female", "Male"])
+            senior_citizen = st.selectbox("Senior Citizen", ["No", "Yes"])
+            partner = st.selectbox("Partner", ["No", "Yes"])
+            dependents = st.selectbox("Dependents", ["No", "Yes"])
+            tenure = st.slider("Tenure (months)", 0, 72, 12)
+            phone_service = st.selectbox("Phone Service", ["No", "Yes"])
+            multiple_lines = st.selectbox("Multiple Lines", ["No", "Yes", "No phone service"])
+            internet_service = st.selectbox("Internet Service", ["DSL", "Fiber optic", "No"])
+            online_security = st.selectbox("Online Security", ["No", "Yes", "No internet service"])
+            online_backup = st.selectbox("Online Backup", ["No", "Yes", "No internet service"])
+        
+        with col2:
+            device_protection = st.selectbox("Device Protection", ["No", "Yes", "No internet service"])
+            tech_support = st.selectbox("Tech Support", ["No", "Yes", "No internet service"])
+            streaming_tv = st.selectbox("Streaming TV", ["No", "Yes", "No internet service"])
+            streaming_movies = st.selectbox("Streaming Movies", ["No", "Yes", "No internet service"])
+            contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
+            paperless_billing = st.selectbox("Paperless Billing", ["No", "Yes"])
+            payment_method = st.selectbox("Payment Method", [
+                "Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"
+            ])
+            monthly_charges = st.slider("Monthly Charges", 18.0, 120.0, 65.0)
+            total_charges = st.slider("Total Charges", 18.0, 8500.0, 1000.0)
+        
+        predict_button = st.form_submit_button("🔮 Predict Churn")
+    
+    if predict_button:
+        # Prepare input data
+        input_data = {
+            'gender': gender,
+            'SeniorCitizen': 1 if senior_citizen == "Yes" else 0,
+            'Partner': partner,
+            'Dependents': dependents,
+            'tenure': tenure,
+            'PhoneService': phone_service,
+            'MultipleLines': multiple_lines,
+            'InternetService': internet_service,
+            'OnlineSecurity': online_security,
+            'OnlineBackup': online_backup,
+            'DeviceProtection': device_protection,
+            'TechSupport': tech_support,
+            'StreamingTV': streaming_tv,
+            'StreamingMovies': streaming_movies,
+            'Contract': contract,
+            'PaperlessBilling': paperless_billing,
+            'PaymentMethod': payment_method,
+            'MonthlyCharges': monthly_charges,
+            'TotalCharges': total_charges
+        }
+        
+        # Create DataFrame
+        input_df = pd.DataFrame([input_data])
+        
+        # Apply same preprocessing
+        label_encoders = st.session_state.label_encoders
+        scaler = st.session_state.scaler
+        
+        # Encode categorical variables
+        for col in ['gender', 'Partner', 'Dependents', 'PhoneService', 'MultipleLines',
+                   'InternetService', 'OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+                   'TechSupport', 'StreamingTV', 'StreamingMovies', 'Contract',
+                   'PaperlessBilling', 'PaymentMethod']:
+            if col in label_encoders:
+                input_df[col + '_encoded'] = label_encoders[col].transform(input_df[col])
+        
+        # Scale numerical features
+        numerical_features = ['tenure', 'MonthlyCharges', 'TotalCharges']
+        input_df[numerical_features] = scaler.transform(input_df[numerical_features])
+        
+        # Select features for prediction
+        feature_columns = st.session_state.feature_columns
+        X_input = input_df[feature_columns]
+        
+        # Make prediction
+        prediction = selected_model.predict(X_input)[0]
+        prediction_proba = selected_model.predict_proba(X_input)[0]
+        
+        # Display results
+        st.subheader("🎯 Prediction Results")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if prediction == 1:
+                st.error("🚨 CUSTOMER WILL CHURN")
+            else:
+                st.success("✅ CUSTOMER WILL STAY")
+        
+        with col2:
+            churn_probability = prediction_proba[1]
+            st.metric("Churn Probability", f"{churn_probability:.2%}")
+        
+        with col3:
+            confidence = max(prediction_proba)
+            st.metric("Prediction Confidence", f"{confidence:.2%}")
+        
+        # Probability visualization
+        fig, ax = plt.subplots(figsize=(8, 4))
+        probabilities = prediction_proba
+        labels = ['No Churn', 'Churn']
+        colors = ['green', 'red']
+        
+        bars = ax.bar(labels, probabilities, color=colors, alpha=0.7)
+        ax.set_ylabel('Probability')
+        ax.set_title(f'Churn Prediction Probabilities ({selected_model_name})')
+        ax.set_ylim(0, 1)
+        
+        # Add value labels on bars
+        for bar, prob in zip(bars, probabilities):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                   f'{prob:.2%}', ha='center', va='bottom')
+        
+        st.pyplot(fig)
+
+# Page 6: Interpretation and Conclusions
+def page_interpretation():
+    st.title("🧠 Interpretation and Conclusions")
+    st.markdown("---")
+    
+    st.write("Bernice Baadawo Abbe- 22253447")
+    st.write("Frederica Atsupi Nkegbe -22253148")
+    st.write("Instil Paakwesi Appau -22252453")
+    st.write("Erwin K. Opare-Essel -22254064")
+    st.write("Anita Dickson -22253364")
+    st.markdown("---")
+    if not st.session_state.models:
+        st.warning("Please train the models first.")
+        return
+    
+    st.subheader("🔍 Key Insights")
+    
+    # Feature importance analysis
+    if st.checkbox("📊 Feature Importance Analysis"):
+        if 'Decision Tree' in st.session_state.models:
+            dt_model = st.session_state.models['Decision Tree']
+            feature_columns = st.session_state.feature_columns
+            
+            importance_df = pd.DataFrame({
+                'Feature': feature_columns,
                 'Importance': dt_model.feature_importances_
             }).sort_values('Importance', ascending=False)
             
-            # Plot feature importance
-            fig, ax = plt.subplots(figsize=(10, 8))
-            top_features = feature_importance.head(10)
-            ax.barh(range(len(top_features)), top_features['Importance'])
-            ax.set_yticks(range(len(top_features)))
-            ax.set_yticklabels(top_features['Feature'])
-            ax.set_xlabel('Importance')
-            ax.set_title('Top 10 Most Important Features (Decision Tree)')
-            ax.invert_yaxis()
+            st.write("**Top 10 Most Important Features for Churn Prediction:**")
+            st.dataframe(importance_df.head(10))
             
-            for i, v in enumerate(top_features['Importance']):
-                ax.text(v + 0.001, i, f'{v:.3f}', va='center')
-            
+            fig, ax = plt.subplots(figsize=(12, 8))
+            sns.barplot(data=importance_df.head(10), y='Feature', x='Importance', ax=ax)
+            ax.set_title('Top 10 Feature Importances (Decision Tree)')
             st.pyplot(fig)
-            
-            # Key insights
-            st.subheader("Key Insights")
-            
-            st.write("**Most Predictive Features:**")
-            for i, (_, row) in enumerate(top_features.head(5).iterrows(), 1):
-                st.write(f"{i}. **{row['Feature']}** (Importance: {row['Importance']:.3f})")
+    
+    # Model performance analysis
+    if st.checkbox("⚖️ Model Performance Analysis"):
+        metrics = st.session_state.model_metrics
         
-        # Model comparison
-        st.subheader("Model Comparison")
+        st.write("**Model Comparison Summary:**")
+        
+        best_accuracy = max(metrics[model]['accuracy'] for model in metrics)
+        best_f1 = max(metrics[model]['f1'] for model in metrics)
+        
+        for model_name, model_metrics in metrics.items():
+            st.write(f"**{model_name}:**")
+            st.write(f"- Accuracy: {model_metrics['accuracy']:.4f}")
+            st.write(f"- F1-Score: {model_metrics['f1']:.4f}")
+            st.write(f"- Precision: {model_metrics['precision']:.4f}")
+            st.write(f"- Recall: {model_metrics['recall']:.4f}")
+            
+            if model_metrics['accuracy'] == best_accuracy:
+                st.write("🏆 **Best Accuracy**")
+            if model_metrics['f1'] == best_f1:
+                st.write("🏆 **Best F1-Score**")
+            st.write("---")
+    
+    # Business insights
+    if st.checkbox("💼 Business Insights"):
+        st.write("**Key Business Insights:**")
+        
+        st.write("""
+        **📈 Customer Retention Strategies:**
+        - Focus on customers with month-to-month contracts (higher churn risk)
+        - Improve technical support services (strong predictor of churn)
+        - Target customers with fiber optic internet (often higher churn)
+        - Monitor customers with electronic check payments
+        
+        **🎯 High-Risk Customer Characteristics:**
+        - Short tenure customers (< 12 months)
+        - High monthly charges with low total charges
+        - No additional services (online security, tech support)
+        - Senior citizens without family support
+        
+        **💡 Recommended Actions:**
+        - Implement early intervention programs for new customers
+        - Offer incentives for annual/two-year contracts
+        - Enhance customer support quality
+        - Bundle services to increase customer stickiness
+        """)
+    
+    # Model trade-offs
+    if st.checkbox("⚖️ Model Trade-offs"):
+        st.write("**Model Selection Guidelines:**")
+        
+        st.write("""
+        **Logistic Regression:**
+        ✅ Pros:
+        - Fast training and prediction
+        - Interpretable coefficients
+        - Good baseline performance
+        - Less prone to overfitting
+        
+        ❌ Cons:
+        - Assumes linear relationships
+        - May miss complex patterns
+        
+        **Decision Tree:**
+        ✅ Pros:
+        - Highly interpretable rules
+        - Captures non-linear relationships
+        - Handles mixed data types well
+        - Provides feature importance
+        
+        ❌ Cons:
+        - Prone to overfitting
+        - Can be unstable
+        - May create biased trees
+        """)
+    
+    # Recommendations
+    if st.checkbox("🎯 Final Recommendations"):
+        st.write("**Implementation Recommendations:**")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("**Logistic Regression**")
-            st.write("- ✅ Provides probability estimates")
-            st.write("- ✅ More robust to overfitting")
-            st.write("- ✅ Works well with linear relationships")
-            st.write(f"- Accuracy: {results['lr_metrics']['Accuracy']:.3f}")
+            st.write("""
+            **For Model Deployment:**
+            - Use ensemble of both models for better reliability
+            - Regularly retrain models with new data
+            - Monitor model performance over time
+            - Set up automated alerts for high-risk customers
+            """)
         
         with col2:
-            st.write("**Decision Tree**")
-            st.write("- ✅ Easy to interpret")
-            st.write("- ✅ Handles non-linear relationships")
-            st.write("- ✅ Doesn't require feature scaling")
-            st.write(f"- Accuracy: {results['dt_metrics']['Accuracy']:.3f}")
-        
-        # Recommendations
-        st.subheader("Business Recommendations")
-        
-        st.write("Based on the analysis, consider these retention strategies:")
-        st.write("1. **Target high-risk customers** identified by the models")
-        st.write("2. **Improve service quality** for customers with short tenure")
-        st.write("3. **Offer incentives** for long-term contracts")
-        st.write("4. **Enhance digital services** to reduce churn")
-        st.write("5. **Review pricing strategy** for high monthly charges")
-        
-        # Model selection recommendation
-        better_model = "Logistic Regression" if results['lr_metrics']['F1-Score'] > results['dt_metrics']['F1-Score'] else "Decision Tree"
-        st.subheader("Recommended Model")
-        st.info(f"**{better_model}** is recommended based on overall performance")
-        
-        if better_model == "Logistic Regression":
-            st.write("Logistic Regression provides more reliable probability estimates and is generally more robust for deployment.")
-        else:
-            st.write("Decision Tree offers better interpretability and handles complex relationships in the data.")
+            st.write("""
+            **For Business Implementation:**
+            - Create customer risk scoring system
+            - Develop targeted retention campaigns
+            - Train customer service team on risk indicators
+            - Implement proactive customer outreach program
+            """)
+    
+    # Summary metrics dashboard
+    if st.checkbox("📊 Summary Dashboard"):
+        if st.session_state.dataset is not None and st.session_state.models:
+            df = st.session_state.dataset
+            metrics = st.session_state.model_metrics
+            
+            st.subheader("📈 Project Summary Dashboard")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Customers", len(df))
+                
+            with col2:
+                churn_rate = (df['Churn'].value_counts().get('Yes', 0) / len(df)) * 100
+                st.metric("Churn Rate", f"{churn_rate:.1f}%")
+            
+            with col3:
+                best_model = max(metrics, key=lambda x: metrics[x]['accuracy'])
+                st.metric("Best Model", best_model)
+            
+            with col4:
+                best_accuracy = max(metrics[model]['accuracy'] for model in metrics)
+                st.metric("Best Accuracy", f"{best_accuracy:.1%}")
+            
+            # Performance comparison chart
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+            
+            # Metrics comparison
+            models = list(metrics.keys())
+            accuracy_scores = [metrics[model]['accuracy'] for model in models]
+            f1_scores = [metrics[model]['f1'] for model in models]
+            
+            x = np.arange(len(models))
+            width = 0.35
+            
+            ax1.bar(x - width/2, accuracy_scores, width, label='Accuracy', alpha=0.8)
+            ax1.bar(x + width/2, f1_scores, width, label='F1-Score', alpha=0.8)
+            ax1.set_xlabel('Models')
+            ax1.set_ylabel('Score')
+            ax1.set_title('Model Performance Comparison')
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(models)
+            ax1.legend()
+            ax1.set_ylim(0, 1)
+            
+            # Churn distribution
+            churn_counts = df['Churn'].value_counts()
+            ax2.pie(churn_counts.values, labels=churn_counts.index, autopct='%1.1f%%', 
+                   colors=['lightblue', 'lightcoral'])
+            ax2.set_title('Overall Churn Distribution')
+            
+            st.pyplot(fig)
 
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.info("""
-**Customer Churn Prediction App**  
-Built with Streamlit
-""")
+# Main navigation
+def main():
+    st.sidebar.title("🚀 Navigation")
+    st.sidebar.markdown("---")
+    
+    pages = {
+        "📊 Data Overview": page_data_overview,
+        "🔧 Data Preprocessing": page_preprocessing,
+        "🤖 Model Training": page_model_training,
+        "📏 Model Evaluation": page_model_evaluation,
+        "🔮 Prediction": page_prediction,
+        "🧠 Interpretation": page_interpretation
+    }
+    
+    selected_page = st.sidebar.selectbox("Select Page", list(pages.keys()))
+    
+    # Add some sidebar information
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📋 Project Info")
+    st.sidebar.info("""
+    **Customer Churn Prediction**
+    
+    This application uses machine learning to predict customer churn based on various customer attributes and service usage patterns.
+    
+    **Models Used:**
+    - Logistic Regression
+    - Decision Tree Classifier
+    
+    **Key Features:**
+    - Interactive data exploration
+    - Model comparison
+    - Real-time predictions
+    - Business insights
+    """)
+    
+    # Dataset status
+    if st.session_state.dataset is not None:
+        st.sidebar.success("✅ Dataset Loaded")
+    else:
+        st.sidebar.warning("⏳ No Dataset Loaded")
+    
+    if st.session_state.processed_data is not None:
+        st.sidebar.success("✅ Data Preprocessed")
+    else:
+        st.sidebar.warning("⏳ Data Not Preprocessed")
+    
+    if st.session_state.models:
+        st.sidebar.success("✅ Models Trained")
+    else:
+        st.sidebar.warning("⏳ Models Not Trained")
+    
+    # Run selected page
+    pages[selected_page]()
+
+if __name__ == "__main__":
+    main()
