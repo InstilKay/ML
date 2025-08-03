@@ -44,14 +44,14 @@ def load_default_dataset():
 
 def preprocess_data(df):
     """Comprehensive data preprocessing function"""
-    df_processed = df.copy()
+    data_generated = df.copy()
     
     # Handle TotalCharges column (convert to numeric)
-    df_processed['TotalCharges'] = df_processed['TotalCharges'].replace(' ', np.nan)
-    df_processed['TotalCharges'] = pd.to_numeric(df_processed['TotalCharges'])
+    data_generated['TotalCharges'] = data_generated['TotalCharges'].replace(' ', np.nan)
+    data_generated['TotalCharges'] = pd.to_numeric(data_generated['TotalCharges'])
     
     # Fill missing values in TotalCharges with median
-    df_processed['TotalCharges'].fillna(df_processed['TotalCharges'].median(), inplace=True)
+    data_generated['TotalCharges'].fillna(data_generated['TotalCharges'].median(), inplace=True)
     
     # Create binary encoding for categorical variables
     label_encoders = {}
@@ -62,9 +62,9 @@ def preprocess_data(df):
                           'PaperlessBilling', 'PaymentMethod', 'Churn']
     
     for col in categorical_columns:
-        if col in df_processed.columns:
+        if col in data_generated.columns:
             le = LabelEncoder()
-            df_processed[col + '_encoded'] = le.fit_transform(df_processed[col])
+            data_generated[col + '_encoded'] = le.fit_transform(data_generated[col])
             label_encoders[col] = le
     
     # Store label encoders in session state
@@ -73,12 +73,12 @@ def preprocess_data(df):
     # Standardize numerical features
     numerical_features = ['tenure', 'MonthlyCharges', 'TotalCharges']
     scaler = StandardScaler()
-    df_processed[numerical_features] = scaler.fit_transform(df_processed[numerical_features])
+    data_generated[numerical_features] = scaler.fit_transform(data_generated[numerical_features])
     
     # Store scaler in session state
     st.session_state.scaler = scaler
     
-    return df_processed
+    return data_generated
 
 def get_model_features(df):
     """Get features for modeling (encoded columns + numerical)"""
