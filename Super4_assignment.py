@@ -240,8 +240,17 @@ def page_data_overview():
 
 # Page 2: Data Preprocessing
 def page_preprocessing():
-    st.title("🔧 Data Preprocessing")
-    st.markdown("---")
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        # Add some vertical padding around the image
+        st.write("")  # Empty space above
+        st.image(img, width=100)
+        st.write("")  # Empty space below
+        
+    with col2:
+        st.title("Data Preprocessing")
+        st.markdown("---")
     
     if st.session_state.dataset is None:
         st.warning("Please load a dataset first from the Data Overview page.")
