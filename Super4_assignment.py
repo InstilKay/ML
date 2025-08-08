@@ -126,9 +126,18 @@ def train_models(X_train, X_test, y_train, y_test):
     return models, metrics
 
 # Page 1: Data Import and Overview
+img = Image.open("mlg2.jpeg")
+
 def page_data_overview():
-    st.title("📊 Data Import and Overview") #streamlit title
-    st.markdown("---")
+    # Create two columns with custom width ratio
+    col1, col2 = st.columns([1, 3])  # First column is 1/4 width, second is 3/4
+    
+    with col1:
+        st.image(img, width=100)  # Adjust width as needed
+        
+    with col2:
+        st.title("Data Import and Overview")
+        st.markdown("---")
     
     
     col1, col2 = st.columns(2)
