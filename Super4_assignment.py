@@ -39,7 +39,7 @@ if 'models' not in st.session_state:
 if 'model_metrics' not in st.session_state:
     st.session_state.model_metrics = {}
 
-def load_default_dataset():
+'''def load_default_dataset():
     """Load the default Telco Customer Churn dataset"""
     try:
         # You can replace this path with your dataset path
@@ -47,7 +47,7 @@ def load_default_dataset():
         return dataset
     except FileNotFoundError:
         st.error("Default dataset not found. Please upload a dataset.")
-        return None
+        return None'''
 
 def preprocess_data(df):
     """Comprehensive data preprocessing function"""
