@@ -133,7 +133,7 @@ def page_data_overview():
     
     col1, col2 = st.columns(2)
         
-    with col2:
+    with col1:
         uploaded_file = st.file_uploader("Upload your own dataset", type=['csv'])
         if uploaded_file is not None:
             dataset = pd.read_csv(uploaded_file)
