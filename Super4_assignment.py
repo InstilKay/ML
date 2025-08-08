@@ -25,7 +25,7 @@ warnings.filterwarnings('ignore')
 # Page configuration
 st.set_page_config(
     page_title="Customer Churn Prediction",
-    page_icon="📱",
+    page_icon="🔄",
     layout="wide"
 )
 
@@ -130,8 +130,6 @@ def page_data_overview():
     st.title("📊 Data Import and Overview") #streamlit title
     st.markdown("---")
     
-    # Data loading section
-    st.subheader("🔄 Data Loading")
     
     col1, col2 = st.columns(2)
     
