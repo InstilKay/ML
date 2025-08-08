@@ -783,6 +783,12 @@ def page_interpretation():
             ax2.set_title('Overall Churn Distribution')
             
             st.pyplot(fig)
+    st.write("Bernice Baadawo Abbe- 22253447")
+    st.write("Frederica Atsupi Nkegbe -22253148")
+    st.write("Instil Paakwesi Appau -22252453")
+    st.write("Erwin K. Opare-Essel -22254064")
+    st.write("Anita Dickson -22253364")
+    st.markdown("---")
 
 # Main navigation
 def main():
