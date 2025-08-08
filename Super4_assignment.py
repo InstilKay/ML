@@ -132,14 +132,7 @@ def page_data_overview():
     
     
     col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("Load Default Dataset"):
-            dataset = load_default_dataset()
-            if dataset is not None:
-                st.session_state.dataset = dataset
-                st.success("Default dataset loaded successfully!")
-    
+        
     with col2:
         uploaded_file = st.file_uploader("Upload your own dataset", type=['csv'])
         if uploaded_file is not None:
