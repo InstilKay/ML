@@ -1,20 +1,27 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import seaborn as sns
-from PIL import Image
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.impute import SimpleImputer
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
+import numpy as np #For numerical operations
+import pandas as pd # for data manipulation
+import matplotlib.pyplot as plt # used for data visualization
+import seaborn as sns # for statistical visualization
+import streamlit as st #Streamlit for interactive web application
+from PIL import Image # for image processing
+
+from sklearn.preprocessing import LabelEncoder, StandardScaler ## LabelEncoder: converts categories to numbers; StandardScaler: standardizes features
+from sklearn.impute import SimpleImputer # Handles missing values by imputing (e.g., with mean, median, etc.)
+from sklearn.model_selection import train_test_split  # Splits dataset into training and test sets
+from sklearn.linear_model import LogisticRegression  # Logistic regression model for binary classification (e.g., churn or no churn)
+from sklearn.tree import DecisionTreeClassifier  # Decision tree model for classification tasks
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, 
                            f1_score, classification_report, confusion_matrix, 
-                           roc_curve, auc)
+                           )   # Tools to evaluate classification model performance:
+   # accuracy_score,                                      # Accuracy: % of total predictions that are correct
+  #  precision_score,                                     # Precision: proportion of true positives among predicted positives
+  #  recall_score,                                        # Recall: proportion of true positives detected among all actual positives
+  #  f1_score,                                            # F1-score: harmonic mean of precision and recall
+  #  classification_report,                              # Full text report with precision, recall, f1-score for each class
+  #  confusion_matrix,                                   # Matrix showing actual vs predicted values (TP, FP, FN, TN)
 import warnings
 warnings.filterwarnings('ignore')
+
 # Page configuration
 st.set_page_config(
     page_title="Customer Churn Prediction",
@@ -44,14 +51,14 @@ def load_default_dataset():
 
 def preprocess_data(df):
     """Comprehensive data preprocessing function"""
-    data_generated = df.copy()
+    df_processed = df.copy()
     
     # Handle TotalCharges column (convert to numeric)
-    data_generated['TotalCharges'] = data_generated['TotalCharges'].replace(' ', np.nan)
-    data_generated['TotalCharges'] = pd.to_numeric(data_generated['TotalCharges'])
+    df_processed['TotalCharges'] = df_processed['TotalCharges'].replace(' ', np.nan)
+    df_processed['TotalCharges'] = pd.to_numeric(df_processed['TotalCharges'])
     
     # Fill missing values in TotalCharges with median
-    data_generated['TotalCharges'].fillna(data_generated['TotalCharges'].median(), inplace=True)
+    df_processed['TotalCharges'].fillna(df_processed['TotalCharges'].median(), inplace=True)
     
     # Create binary encoding for categorical variables
     label_encoders = {}
@@ -61,24 +68,24 @@ def preprocess_data(df):
                           'StreamingTV', 'StreamingMovies', 'Contract', 
                           'PaperlessBilling', 'PaymentMethod', 'Churn']
     
-    for col in categorical_columns:
-        if col in data_generated.columns:
+    for col in categorical_columns:   ##iteration to encoding the categorical variables to numeric values and fit it back into the dataset
+        if col in df_processed.columns:
             le = LabelEncoder()
-            data_generated[col + '_encoded'] = le.fit_transform(data_generated[col])
+            df_processed[col + '_encoded'] = le.fit_transform(df_processed[col])
             label_encoders[col] = le
     
     # Store label encoders in session state
     st.session_state.label_encoders = label_encoders
     
     # Standardize numerical features
-    numerical_features = ['tenure', 'MonthlyCharges', 'TotalCharges']
+    numerical_features = ['tenure', 'MonthlyCharges', 'TotalCharges'] #creating a dictionary for the numerical features
     scaler = StandardScaler()
-    data_generated[numerical_features] = scaler.fit_transform(data_generated[numerical_features])
+    df_processed[numerical_features] = scaler.fit_transform(df_processed[numerical_features])
     
     # Store scaler in session state
-    st.session_state.scaler = scaler
+    st.session_state.scaler = scaler  # Stores the scaler object in streamlits session state to reuse it across different pages or user interactions
     
-    return data_generated
+    return df_processed
 
 def get_model_features(df):
     """Get features for modeling (encoded columns + numerical)"""
@@ -108,7 +115,7 @@ def train_models(X_train, X_test, y_train, y_test):
     }
     
     # Decision Tree
-    dt_model = DecisionTreeClassifier(random_state=42, max_depth=10)
+    dt_model = DecisionTreeClassifier(random_state=42, max_depth=10) #set split of data(random_state) max_depth=10 means the maximum number of splits (or “levels”) the tree can have from the root node to the deepest leaf node is 10.
     dt_model.fit(X_train, y_train)
     dt_pred = dt_model.predict(X_test)
     dt_pred_proba = dt_model.predict_proba(X_test)[:, 1]
@@ -127,18 +134,9 @@ def train_models(X_train, X_test, y_train, y_test):
     return models, metrics
 
 # Page 1: Data Import and Overview
-img = Image.open("mlg2.jpeg")
-
 def page_data_overview():
-    # Create two columns with custom width ratio
-    col1, col2 = st.columns([1, 3])  # First column is 1/4 width, second is 3/4
-    
-    with col1:
-        st.image(img, width=100)  # Adjust width as needed
-        
-    with col2:
-        st.title("Data Import and Overview")
-        st.markdown("---")
+    st.title("📊 Data Import and Overview") #streamlit title
+    st.markdown("---")
     
     # Data loading section
     st.subheader("🔄 Data Loading")
@@ -167,19 +165,19 @@ def page_data_overview():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Customers", len(df))
+            st.metric("Total Customers", len(df)) #Total number of customers
         with col2:
-            churn_count = df['Churn'].value_counts().get('Yes', 0)
+            churn_count = df['Churn'].value_counts().get('Yes', 0)  #  How many have churned
             st.metric("Churned Customers", churn_count)
         with col3:
-            churn_rate = (churn_count / len(df)) * 100
-            st.metric("Churn Rate", f"{churn_rate:.1f}%")
+            churn_rate = (churn_count / len(df)) * 100  #The churn percentage
+            st.metric("Churn Rate", f"{churn_rate:.1f}%")#Total number of features in your dataset
         with col4:
             st.metric("Features", len(df.columns))
         
         # Display raw data
         if st.checkbox("📋 Show Raw Dataset"):
-            st.dataframe(df.head(100))
+            st.dataframe(df.head(100)) #printing first 100 rows in the dataset.
         
         # Summary statistics
         if st.checkbox("📊 Show Summary Statistics"):
@@ -200,13 +198,13 @@ def page_data_overview():
             fig, ax = plt.subplots(1, 2, figsize=(12, 5))
             
             # Churn count plot
-            df['Churn'].value_counts().plot(kind='bar', ax=ax[0], color=['skyblue', 'salmon'])
+            df['Churn'].value_counts().plot(kind='bar', ax=ax[0], color=['blue', 'orange'])
             ax[0].set_title('Churn Distribution')
             ax[0].set_xlabel('Churn')
             ax[0].set_ylabel('Count')
             
             # Churn pie chart
-            df['Churn'].value_counts().plot(kind='pie', ax=ax[1], autopct='%1.1f%%', colors=['skyblue', 'salmon'])
+            df['Churn'].value_counts().plot(kind='pie', ax=ax[1], autopct='%1.1f%%', colors=['blue', 'orange'])
             ax[1].set_title('Churn Percentage')
             ax[1].set_ylabel('')
             
@@ -240,17 +238,8 @@ def page_data_overview():
 
 # Page 2: Data Preprocessing
 def page_preprocessing():
-    col1, col2 = st.columns([1, 3])
-    
-    with col1:
-        # Add some vertical padding around the image
-        st.write("")  # Empty space above
-        st.image(img, width=100)
-        st.write("")  # Empty space below
-        
-    with col2:
-        st.title("Data Preprocessing")
-        st.markdown("---")
+    st.title("🔧 Data Preprocessing")
+    st.markdown("---")
     
     if st.session_state.dataset is None:
         st.warning("Please load a dataset first from the Data Overview page.")
@@ -279,10 +268,14 @@ def page_preprocessing():
         st.write(f"Found {len(total_charges_issues)} rows with space in TotalCharges")
         if len(total_charges_issues) > 0:
             st.dataframe(total_charges_issues)
+        else:
+            st.balloons()
+            st.info("No issues found!")
+
     
     # Preprocessing
     st.subheader("⚙️ Apply Preprocessing")
-    
+
     if st.button("🚀 Process Data"):
         with st.spinner("Processing data..."):
             processed_data = preprocess_data(df)
@@ -332,7 +325,7 @@ def page_model_training():
     with col1:
         test_size = st.slider("Test Size", 0.1, 0.5, 0.2, 0.05)
     with col2:
-        random_state = st.number_input("Random State", value=42, min_value=0)
+        random_state = st.number_input("Random State", value=40, min_value=0)
     
     # Show model parameters
     if st.checkbox("⚙️ Show Model Parameters"):
@@ -387,7 +380,7 @@ def page_model_training():
             
             fig, ax = plt.subplots(figsize=(10, 8))
             sns.barplot(data=feature_importance.head(10), y='feature', x='importance', ax=ax)
-            ax.set_title('Top 10 Feature Importances (Decision Tree)')
+            ax.set_title('Top 10 Feature Importance (Decision Tree)')
             st.pyplot(fig)
             
             st.dataframe(feature_importance)
@@ -410,10 +403,10 @@ def page_model_evaluation():
     for model_name, model_metrics in metrics.items():
         comparison_data.append({
             'Model': model_name,
-            'Accuracy': f"{model_metrics['accuracy']:.4f}",
-            'Precision': f"{model_metrics['precision']:.4f}",
-            'Recall': f"{model_metrics['recall']:.4f}",
-            'F1-Score': f"{model_metrics['f1']:.4f}"
+            'Accuracy': f"{model_metrics['accuracy']:.2f}",
+            'Precision': f"{model_metrics['precision']:.2f}",
+            'Recall': f"{model_metrics['recall']:.2f}",
+            'F1-Score': f"{model_metrics['f1']:.2f}"
         })
     
     comparison_df = pd.DataFrame(comparison_data)
@@ -445,27 +438,7 @@ def page_model_evaluation():
         ax.set_xlabel('Predicted')
         ax.set_ylabel('Actual')
         st.pyplot(fig)
-    
-    # ROC Curve
-    if st.checkbox("📈 Show ROC Curve"):
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        for model_name, model_metrics in metrics.items():
-            y_test = st.session_state.y_test
-            probabilities = model_metrics['probabilities']
-            
-            fpr, tpr, _ = roc_curve(y_test, probabilities)
-            roc_auc = auc(fpr, tpr)
-            
-            ax.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.3f})')
-        
-        ax.plot([0, 1], [0, 1], 'k--', label='Random')
-        ax.set_xlabel('False Positive Rate')
-        ax.set_ylabel('True Positive Rate')
-        ax.set_title('ROC Curves Comparison')
-        ax.legend()
-        ax.grid(True)
-        st.pyplot(fig)
+
     
     # Model comparison visualization
     if st.checkbox("📊 Show Metrics Comparison Chart"):
@@ -595,7 +568,8 @@ def page_prediction():
             if prediction == 1:
                 st.error("🚨 CUSTOMER WILL CHURN")
             else:
-                st.success("✅ CUSTOMER WILL STAY")
+                st.snow()
+                st.info("✅ CUSTOMER WILL STAY")
         
         with col2:
             churn_probability = prediction_proba[1]
@@ -629,12 +603,6 @@ def page_interpretation():
     st.title("🧠 Interpretation and Conclusions")
     st.markdown("---")
     
-    st.write("Bernice Baadawo Abbe- 22253447")
-    st.write("Frederica Atsupi Nkegbe -22253148")
-    st.write("Instil Paakwesi Appau -22252453")
-    st.write("Erwin K. Opare-Essel -22254064")
-    st.write("Anita Dickson -22253364")
-    st.markdown("---")
     if not st.session_state.models:
         st.warning("Please train the models first.")
         return
@@ -671,10 +639,10 @@ def page_interpretation():
         
         for model_name, model_metrics in metrics.items():
             st.write(f"**{model_name}:**")
-            st.write(f"- Accuracy: {model_metrics['accuracy']:.4f}")
-            st.write(f"- F1-Score: {model_metrics['f1']:.4f}")
-            st.write(f"- Precision: {model_metrics['precision']:.4f}")
-            st.write(f"- Recall: {model_metrics['recall']:.4f}")
+            st.write(f"- Accuracy: {model_metrics['accuracy']:.2f}")
+            st.write(f"- F1-Score: {model_metrics['f1']:.2f}")
+            st.write(f"- Precision: {model_metrics['precision']:.2f}")
+            st.write(f"- Recall: {model_metrics['recall']:.2f}")
             
             if model_metrics['accuracy'] == best_accuracy:
                 st.write("🏆 **Best Accuracy**")
