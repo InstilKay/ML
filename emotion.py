@@ -64,8 +64,8 @@ def preprocess_text(text):
 
 def download_glove():
     """Download GloVe embeddings if not present"""
-    glove_url = "https://nlp.stanford.edu/data/glove.6B.zip"
-    glove_path = "glove.6B.100d.txt"
+    #glove_url = "https://nlp.stanford.edu/data/glove.6B.zip"
+    glove_path = "glove.6B.100c.txt"
     
     if not os.path.exists(glove_path):
         print("Downloading GloVe embeddings...")
