@@ -64,7 +64,7 @@ def preprocess_text(text):
 
 def download_glove():
     """Download GloVe embeddings if not present"""
-    #glove_url = "https://github.com/InstilKay/ML/blob/main/glove.6B.100c.txt"
+    glove_url = "https://github.com/InstilKay/ML/blob/main/glove.6B.100c.txt"
     glove_path = "glove.6B.100c.txt"
     
     if not os.path.exists(glove_path):
