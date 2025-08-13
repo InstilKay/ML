@@ -6,10 +6,3 @@ scikit-learn
 plotly
 seaborn
 nltk
-tensorflow
-tensorflow==2.16.1
-scikit-learn==1.4.0
-numpy==1.26.4
-pandas==2.2.2
-nltk==3.8.1
-streamlit==1.35.0
